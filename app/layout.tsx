@@ -1,10 +1,6 @@
-"use client";
-
 import { Geist, Geist_Mono } from "next/font/google";
-import { AuthProvider } from "@/app/context/AuthContext";
-import Navbar from "@/app/components/Navbar";
-import Footer from "@/app/components/Footer";
 import "./globals.css";
+import ClientLayout from "@/app/ClientLayout";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,6 +14,76 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+export const metadata = {
+  metadataBase: new URL("https://www.jobsolution.in"),
+
+  title: {
+    default: "JobSolution - Find Jobs & Hire Talent",
+    template: "%s | JobSolution",
+  },
+
+  description:
+    "JobSolution is a career growth platform where job seekers find jobs and employers hire top talent across India.",
+
+  keywords: [
+    "jobs in india",
+    "hire employees",
+    "job portal",
+    "career growth",
+    "JobSolution",
+    "latest jobs",
+    "private jobs",
+  ],
+
+  authors: [{ name: "JobSolution Team", url: "https://www.jobsolution.in" }],
+  creator: "JobSolution",
+  publisher: "JobSolution",
+
+  openGraph: {
+    title: "JobSolution - Find Jobs & Hire Talent",
+    description:
+      "Discover top job opportunities and hire the best talent with JobSolution.",
+    url: "https://www.jobsolution.in",
+    siteName: "JobSolution",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "JobSolution Career Platform",
+      },
+    ],
+    type: "website",
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title: "JobSolution - Career Growth Platform",
+    description:
+      "Find jobs, hire talent and grow your career with JobSolution.",
+    images: ["/og-image.jpg"],
+    creator: "@jobsolution", // apna twitter username
+  },
+
+  robots: {
+    index: true,
+    follow: true,
+  },
+
+  alternates: {
+    canonical: "https://www.jobsolution.in",
+  },
+
+  // 👇 Social Profiles (Very Important for Google Knowledge Panel)
+  other: {
+    "facebook:page": "https://www.facebook.com/jobsolution",
+    "instagram:profile": "https://www.instagram.com/jobsolution",
+    "linkedin:profile": "https://www.linkedin.com/company/jobsolution",
+    "twitter:profile": "https://twitter.com/jobsolution",
+    "youtube:channel": "https://www.youtube.com/@jobsolution",
+  },
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -27,53 +93,9 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable}`}
-      suppressHydrationWarning
     >
-      <head>
-        {/* Preconnect to important third-party domains */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
-        
-        {/* Favicon configurations */}
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-        <link rel="manifest" href="/site.webmanifest" />
-        <meta name="msapplication-TileColor" content="#2563eb" />
-        <meta name="theme-color" content="#2563eb" />
-        
-        {/* Additional SEO meta tags */}
-        <meta name="geo.region" content="IN" />
-        <meta name="geo.placename" content="India" />
-        <meta name="author" content="JobSolution" />
-        <meta name="copyright" content="JobSolution" />
-        <meta name="revisit-after" content="1 days" />
-        <meta name="language" content="English" />
-        <meta name="distribution" content="global" />
-        <meta name="rating" content="General" />
-      </head>
       <body className="bg-gray-100 flex flex-col min-h-screen">
-        {/* Wrap everything with AuthProvider */}
-        <AuthProvider>
-          {/* Skip to main content link for accessibility */}
-          <a
-            href="#main-content"
-            className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded-lg"
-          >
-            Skip to main content
-          </a>
-
-          {/* Navbar */}
-          <Navbar />
-
-          {/* Page Content with main landmark */}
-          <main id="main-content" className="flex-1 pt-20 px-6" role="main">
-            {children}
-          </main>
-
-          {/* Footer */}
-          <Footer />
-        </AuthProvider>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );

@@ -25,6 +25,7 @@ export default function Navbar() {
   }
 
   const navLinks = [
+    { name: "Home", path: "/" },
     { name: "About Us", path: "/about" },
     { name: "Jobs", path: "/jobs" },
     { name: "Companies", path: "/companies" },
@@ -34,21 +35,39 @@ export default function Navbar() {
     { name: "Contact", path: "/contact" }
   ]
 
+  const isActive = (path) => {
+    if (path === "/") {
+      return pathname === "/"
+    }
+    return pathname.startsWith(path)
+  }
+
   return (
-    <nav className={`fixed w-full z-50 transition-all duration-300 
-      ${scrolled ? "bg-white/80 backdrop-blur-md shadow-lg" : "bg-white"}
-    `}>
+    <nav
+      className={`fixed w-full z-50 transition-all duration-300 ${
+        scrolled
+          ? "bg-white/80 backdrop-blur-md shadow-lg"
+          : "bg-white"
+      }`}
+    >
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex justify-between items-center py-4">
 
           {/* LOGO */}
-          <Link href="/" className="flex flex-col">
-            <span className="text-3xl font-extrabold text-blue-600 tracking-tight">
-              Job<span className="text-green-500">Solution</span>
-            </span>
-            <span className="text-xs text-gray-500">
-              A Career Growth Platform
-            </span>
+          <Link href="/" className="flex items-center gap-3">
+            <img
+              src="/job.png"
+              alt="JobSolution Logo"
+              className="h-10 w-auto"
+            />
+            <div className="flex flex-col leading-tight">
+              <span className="text-xl font-bold text-blue-600">
+                Job<span className="text-green-500">Solution</span>
+              </span>
+              <span className="text-xs text-gray-500">
+                A Career Growth Platform
+              </span>
+            </div>
           </Link>
 
           {/* DESKTOP MENU */}
@@ -57,12 +76,15 @@ export default function Navbar() {
               <Link
                 key={link.name}
                 href={link.path}
-                className={`relative transition duration-300 hover:text-blue-600
-                  ${pathname === link.path ? "text-blue-600" : "text-gray-700"}
-                `}
+                className={`relative transition duration-300 hover:text-blue-600 ${
+                  isActive(link.path)
+                    ? "text-blue-600"
+                    : "text-gray-700"
+                }`}
               >
                 {link.name}
-                {pathname === link.path && (
+
+                {isActive(link.path) && (
                   <span className="absolute -bottom-1 left-0 w-full h-0.5 bg-blue-600 rounded"></span>
                 )}
               </Link>
@@ -86,7 +108,7 @@ export default function Navbar() {
             </button>
           </div>
 
-          {/* MOBILE BUTTON */}
+          {/* MOBILE MENU BUTTON */}
           <div className="lg:hidden">
             <button
               onClick={() => setIsOpen(!isOpen)}
@@ -95,20 +117,23 @@ export default function Navbar() {
               {isOpen ? <X size={28} /> : <Menu size={28} />}
             </button>
           </div>
-
         </div>
       </div>
 
       {/* MOBILE MENU */}
       {isOpen && (
-        <div className="lg:hidden bg-white/95 backdrop-blur-md shadow-xl px-6 pb-6 space-y-5 animate-fadeIn">
+        <div className="lg:hidden bg-white/95 backdrop-blur-md shadow-xl px-6 pb-6 space-y-5">
 
           {navLinks.map((link) => (
             <Link
               key={link.name}
               href={link.path}
               onClick={() => setIsOpen(false)}
-              className="block text-gray-700 font-medium hover:text-blue-600 transition"
+              className={`block font-medium transition ${
+                isActive(link.path)
+                  ? "text-blue-600"
+                  : "text-gray-700 hover:text-blue-600"
+              }`}
             >
               {link.name}
             </Link>
