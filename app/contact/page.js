@@ -103,7 +103,7 @@ export default function ContactPage() {
                 </a>
               </p>
               <p className="text-gray-500 text-sm mt-2">
-                Mon-Sun, 9:00 AM - 6:00 PM
+                Mon-SAT, 9:00 AM - 6:00 PM
               </p>
             </div>
 
