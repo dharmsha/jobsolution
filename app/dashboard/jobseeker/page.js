@@ -11,7 +11,10 @@ import {
   where, 
   doc, 
   getDoc,
-  updateDoc
+  updateDoc,
+  onSnapshot,
+  orderBy,
+  limit
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
@@ -34,7 +37,13 @@ import {
   Phone,
   BookOpen,
   TrendingUp,
-  Menu
+  Menu,
+  Bell,
+  MessageSquare,
+  Star,
+  ThumbsUp,
+  Users,
+  Filter
 } from "lucide-react";
 
 export default function JobseekerDashboard() {
@@ -60,6 +69,12 @@ export default function JobseekerDashboard() {
   const [coverLetter, setCoverLetter] = useState("");
   const [applying, setApplying] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedApplication, setSelectedApplication] = useState(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [employerFeedback, setEmployerFeedback] = useState("");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -70,11 +85,71 @@ export default function JobseekerDashboard() {
         await fetchUserData(currentUser.uid);
         await fetchJobs();
         await fetchAppliedJobs(currentUser.uid);
+        setupRealtimeListeners(currentUser.uid);
         setLoading(false);
       }
     });
     return () => unsubscribe();
   }, [router]);
+
+  const setupRealtimeListeners = (uid) => {
+    // Real-time listener for applications
+    const q = query(collection(db, "applications"), where("userId", "==", uid));
+    const unsubscribeApplications = onSnapshot(q, (snapshot) => {
+      const appliedList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        jobId: doc.data().jobId,
+        jobTitle: doc.data().jobTitle,
+        companyName: doc.data().companyName,
+        status: doc.data().status || "pending",
+        appliedAt: doc.data().appliedAt?.toDate() || new Date(),
+        statusHistory: doc.data().statusHistory || [],
+        employerFeedback: doc.data().employerFeedback || "",
+        viewedAt: doc.data().viewedAt?.toDate(),
+        shortlistedAt: doc.data().shortlistedAt?.toDate(),
+        hiredAt: doc.data().hiredAt?.toDate(),
+        rejectedAt: doc.data().rejectedAt?.toDate(),
+        lastUpdated: doc.data().lastUpdated?.toDate()
+      }));
+      setAppliedJobs(appliedList);
+      
+      // Generate notifications for status changes
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "modified") {
+          const newData = change.doc.data();
+          const oldData = change.doc.previousData();
+          if (oldData && newData.status !== oldData.status) {
+            addNotification({
+              title: "Application Status Updated",
+              message: `Your application for ${newData.jobTitle} at ${newData.companyName} has been ${newData.status}`,
+              type: newData.status,
+              applicationId: change.doc.id,
+              timestamp: new Date()
+            });
+          }
+          if (newData.employerFeedback && (!oldData || newData.employerFeedback !== oldData.employerFeedback)) {
+            addNotification({
+              title: "New Feedback Received",
+              message: `Employer shared feedback for ${newData.jobTitle} position`,
+              type: "feedback",
+              applicationId: change.doc.id,
+              timestamp: new Date()
+            });
+          }
+        }
+      });
+    });
+
+    return () => unsubscribeApplications();
+  };
+
+  const addNotification = (notification) => {
+    setNotifications(prev => [notification, ...prev].slice(0, 20));
+    // Optional: Show browser notification
+    if (Notification.permission === "granted") {
+      new Notification(notification.title, { body: notification.message });
+    }
+  };
 
   const fetchUserData = async (uid) => {
     try {
@@ -109,8 +184,16 @@ export default function JobseekerDashboard() {
       const appliedList = snapshot.docs.map(doc => ({
         id: doc.id,
         jobId: doc.data().jobId,
+        jobTitle: doc.data().jobTitle,
+        companyName: doc.data().companyName,
         status: doc.data().status || "pending",
-        appliedAt: doc.data().appliedAt?.toDate() || new Date()
+        appliedAt: doc.data().appliedAt?.toDate() || new Date(),
+        statusHistory: doc.data().statusHistory || [],
+        employerFeedback: doc.data().employerFeedback || "",
+        viewedAt: doc.data().viewedAt?.toDate(),
+        shortlistedAt: doc.data().shortlistedAt?.toDate(),
+        hiredAt: doc.data().hiredAt?.toDate(),
+        rejectedAt: doc.data().rejectedAt?.toDate()
       }));
       setAppliedJobs(appliedList);
     } catch (error) {
@@ -198,7 +281,13 @@ export default function JobseekerDashboard() {
         resumeUrl: userData.resumeUrl,
         coverLetter: coverLetter,
         appliedAt: new Date(),
-        status: "pending"
+        status: "pending",
+        statusHistory: [{
+          status: "pending",
+          timestamp: new Date(),
+          note: "Application submitted"
+        }],
+        lastUpdated: new Date()
       });
       alert("Application Submitted Successfully!");
       setShowApplyModal(null);
@@ -216,22 +305,90 @@ export default function JobseekerDashboard() {
     router.push("/login?role=jobseeker");
   };
 
+  const viewApplicationDetails = (application) => {
+    setSelectedApplication(application);
+    if (application.employerFeedback) {
+      setEmployerFeedback(application.employerFeedback);
+    }
+  };
+
   const getStatusConfig = (status) => {
     switch(status?.toLowerCase()) {
-      case "shortlisted": return { color: "bg-green-500", icon: Award, text: "Shortlisted", bg: "bg-green-50 text-green-700" };
-      case "rejected": return { color: "bg-red-500", icon: XCircle, text: "Rejected", bg: "bg-red-50 text-red-700" };
-      case "viewed": return { color: "bg-blue-500", icon: Eye, text: "Viewed", bg: "bg-blue-50 text-blue-700" };
-      case "hired": return { color: "bg-purple-500", icon: CheckCircle, text: "Hired", bg: "bg-purple-50 text-purple-700" };
-      default: return { color: "bg-yellow-500", icon: Clock, text: "Pending", bg: "bg-yellow-50 text-yellow-700" };
+      case "shortlisted": 
+        return { 
+          color: "bg-green-500", 
+          icon: Star, 
+          text: "Shortlisted", 
+          bg: "bg-green-50 text-green-700",
+          border: "border-green-200",
+          description: "Congratulations! You've been shortlisted for the next round."
+        };
+      case "rejected": 
+        return { 
+          color: "bg-red-500", 
+          icon: XCircle, 
+          text: "Rejected", 
+          bg: "bg-red-50 text-red-700",
+          border: "border-red-200",
+          description: "Application not selected for this position."
+        };
+      case "viewed": 
+        return { 
+          color: "bg-blue-500", 
+          icon: Eye, 
+          text: "Viewed", 
+          bg: "bg-blue-50 text-blue-700",
+          border: "border-blue-200",
+          description: "Employer has viewed your application."
+        };
+      case "hired": 
+        return { 
+          color: "bg-purple-500", 
+          icon: Award, 
+          text: "Hired", 
+          bg: "bg-purple-50 text-purple-700",
+          border: "border-purple-200",
+          description: "Congratulations! You've been selected for this position!"
+        };
+      case "interview": 
+        return { 
+          color: "bg-orange-500", 
+          icon: Users, 
+          text: "Interview Scheduled", 
+          bg: "bg-orange-50 text-orange-700",
+          border: "border-orange-200",
+          description: "Interview has been scheduled. Check details below."
+        };
+      default: 
+        return { 
+          color: "bg-yellow-500", 
+          icon: Clock, 
+          text: "Pending Review", 
+          bg: "bg-yellow-50 text-yellow-700",
+          border: "border-yellow-200",
+          description: "Your application is under review by the employer."
+        };
     }
+  };
+
+  const getFilteredApplications = () => {
+    if (statusFilter === "all") return appliedJobs;
+    return appliedJobs.filter(app => app.status === statusFilter);
   };
 
   const stats = [
     { label: "Total Applied", value: appliedJobs.length, icon: Briefcase, color: "bg-blue-500" },
-    { label: "Shortlisted", value: appliedJobs.filter(j => j.status === "shortlisted").length, icon: Award, color: "bg-green-500" },
-    { label: "In Review", value: appliedJobs.filter(j => j.status === "pending" || j.status === "viewed").length, icon: Clock, color: "bg-yellow-500" },
-    { label: "Profile Views", value: "124", icon: Eye, color: "bg-purple-500" },
+    { label: "Shortlisted", value: appliedJobs.filter(j => j.status === "shortlisted").length, icon: Star, color: "bg-green-500" },
+    { label: "Interviews", value: appliedJobs.filter(j => j.status === "interview").length, icon: Users, color: "bg-orange-500" },
+    { label: "Hired", value: appliedJobs.filter(j => j.status === "hired").length, icon: Award, color: "bg-purple-500" },
   ];
+
+  // Request notification permission
+  useEffect(() => {
+    if (Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -247,6 +404,39 @@ export default function JobseekerDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
       
+      {/* Notification Bell */}
+      <div className="fixed top-20 right-4 z-40">
+        <button
+          onClick={() => setShowNotifications(!showNotifications)}
+          className="relative bg-white rounded-full p-2 shadow-lg hover:shadow-xl transition"
+        >
+          <Bell className="w-6 h-6 text-gray-600" />
+          {notifications.length > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              {notifications.length}
+            </span>
+          )}
+        </button>
+        
+        {/* Notifications Dropdown */}
+        {showNotifications && (
+          <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border max-h-96 overflow-y-auto">
+            <div className="p-3 border-b font-semibold">Notifications</div>
+            {notifications.length === 0 ? (
+              <div className="p-4 text-center text-gray-500">No new notifications</div>
+            ) : (
+              notifications.map((notif, idx) => (
+                <div key={idx} className="p-3 border-b hover:bg-gray-50 cursor-pointer">
+                  <p className="font-semibold text-sm">{notif.title}</p>
+                  <p className="text-xs text-gray-600 mt-1">{notif.message}</p>
+                  <p className="text-xs text-gray-400 mt-1">{notif.timestamp.toLocaleTimeString()}</p>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Mobile Menu Button */}
       <div className="lg:hidden fixed bottom-6 right-6 z-50">
         <button
@@ -322,7 +512,13 @@ export default function JobseekerDashboard() {
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {stats.map((stat, idx) => (
-            <div key={idx} className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition">
+            <div key={idx} className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition cursor-pointer" onClick={() => {
+              if (stat.label === "Shortlisted") setStatusFilter("shortlisted");
+              else if (stat.label === "Interviews") setStatusFilter("interview");
+              else if (stat.label === "Hired") setStatusFilter("hired");
+              else setStatusFilter("all");
+              setActiveTab("applications");
+            }}>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-500 text-sm">{stat.label}</p>
@@ -560,38 +756,229 @@ export default function JobseekerDashboard() {
           </div>
         )}
 
-        {/* Applications Tab */}
+        {/* Applications Tab - Enhanced */}
         {activeTab === "applications" && (
-          <div className="space-y-4">
-            {appliedJobs.length === 0 ? (
-              <div className="bg-white rounded-2xl p-12 text-center">
-                <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">You haven't applied for any jobs yet.</p>
-                <button onClick={() => setActiveTab("jobs")} className="mt-4 text-blue-600 hover:underline">Browse Jobs →</button>
-              </div>
-            ) : (
-              appliedJobs.map((application) => {
-                const job = jobs.find(j => j.id === application.jobId);
-                const statusConfig = getStatusConfig(application.status);
-                return (
-                  <div key={application.id} className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition">
-                    <div className="flex flex-col md:flex-row justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2 flex-wrap">
-                          <h3 className="text-xl font-bold text-gray-900">{job?.title || "Unknown Job"}</h3>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusConfig.bg}`}>{statusConfig.text}</span>
+          <div>
+            {/* Status Filter */}
+            <div className="mb-6 flex flex-wrap gap-2 items-center">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <button
+                onClick={() => setStatusFilter("all")}
+                className={`px-3 py-1 rounded-full text-sm transition ${
+                  statusFilter === "all" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                }`}
+              >
+                All ({appliedJobs.length})
+              </button>
+              <button
+                onClick={() => setStatusFilter("pending")}
+                className={`px-3 py-1 rounded-full text-sm transition ${
+                  statusFilter === "pending" ? "bg-yellow-600 text-white" : "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                }`}
+              >
+                Pending ({appliedJobs.filter(j => j.status === "pending").length})
+              </button>
+              <button
+                onClick={() => setStatusFilter("viewed")}
+                className={`px-3 py-1 rounded-full text-sm transition ${
+                  statusFilter === "viewed" ? "bg-blue-600 text-white" : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                }`}
+              >
+                Viewed ({appliedJobs.filter(j => j.status === "viewed").length})
+              </button>
+              <button
+                onClick={() => setStatusFilter("shortlisted")}
+                className={`px-3 py-1 rounded-full text-sm transition ${
+                  statusFilter === "shortlisted" ? "bg-green-600 text-white" : "bg-green-100 text-green-700 hover:bg-green-200"
+                }`}
+              >
+                Shortlisted ({appliedJobs.filter(j => j.status === "shortlisted").length})
+              </button>
+              <button
+                onClick={() => setStatusFilter("interview")}
+                className={`px-3 py-1 rounded-full text-sm transition ${
+                  statusFilter === "interview" ? "bg-orange-600 text-white" : "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                }`}
+              >
+                Interview ({appliedJobs.filter(j => j.status === "interview").length})
+              </button>
+              <button
+                onClick={() => setStatusFilter("hired")}
+                className={`px-3 py-1 rounded-full text-sm transition ${
+                  statusFilter === "hired" ? "bg-purple-600 text-white" : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+                }`}
+              >
+                Hired ({appliedJobs.filter(j => j.status === "hired").length})
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {getFilteredApplications().length === 0 ? (
+                <div className="bg-white rounded-2xl p-12 text-center">
+                  <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500">No applications found with selected filter.</p>
+                  <button onClick={() => setStatusFilter("all")} className="mt-4 text-blue-600 hover:underline">View all applications →</button>
+                </div>
+              ) : (
+                getFilteredApplications().map((application) => {
+                  const job = jobs.find(j => j.id === application.jobId);
+                  const statusConfig = getStatusConfig(application.status);
+                  const StatusIcon = statusConfig.icon;
+                  
+                  return (
+                    <div key={application.id} className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition border-l-4" style={{ borderLeftColor: statusConfig.color.replace('bg-', '') }}>
+                      <div className="flex flex-col md:flex-row justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2 flex-wrap">
+                            <h3 className="text-xl font-bold text-gray-900">{application.jobTitle || job?.title || "Unknown Job"}</h3>
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusConfig.bg} flex items-center gap-1`}>
+                              <StatusIcon className="w-3 h-3" />
+                              {statusConfig.text}
+                            </span>
+                          </div>
+                          <p className="text-gray-600">{application.companyName || job?.company}</p>
+                          
+                          {/* Status Timeline */}
+                          {application.statusHistory && application.statusHistory.length > 0 && (
+                            <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+                              <Clock className="w-3 h-3" />
+                              <span>Last updated: {application.lastUpdated?.toLocaleDateString() || application.appliedAt.toLocaleDateString()}</span>
+                            </div>
+                          )}
+                          
+                          {/* Employer Feedback */}
+                          {application.employerFeedback && (
+                            <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                              <div className="flex items-start gap-2">
+                                <MessageSquare className="w-4 h-4 text-blue-600 mt-0.5" />
+                                <div>
+                                  <p className="text-xs font-semibold text-blue-800">Employer Feedback:</p>
+                                  <p className="text-sm text-blue-700">{application.employerFeedback}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Status-specific information */}
+                          {application.status === "shortlisted" && (
+                            <div className="mt-3 flex items-center gap-2 text-sm text-green-600">
+                              <ThumbsUp className="w-4 h-4" />
+                              <span>You've been shortlisted! The employer will contact you soon for the next steps.</span>
+                            </div>
+                          )}
+                          
+                          {application.status === "interview" && (
+                            <div className="mt-3 p-3 bg-orange-50 rounded-lg">
+                              <p className="text-sm text-orange-800">📅 Interview details will be shared by the employer via email or phone.</p>
+                            </div>
+                          )}
+                          
+                          {application.status === "hired" && (
+                            <div className="mt-3 p-3 bg-purple-50 rounded-lg">
+                              <p className="text-sm text-purple-800">🎉 Congratulations! You've been selected. The employer will reach out with offer details.</p>
+                            </div>
+                          )}
                         </div>
-                        <p className="text-gray-600">{job?.company}</p>
-                        <p className="text-sm text-gray-500 mt-2 flex items-center gap-1"><Calendar className="w-3 h-3" />Applied on {application.appliedAt.toLocaleDateString()}</p>
+                        
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={() => viewApplicationDetails(application)}
+                            className="px-4 py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition flex items-center gap-2"
+                          >
+                            <Eye className="w-4 h-4" />
+                            View Details
+                          </button>
+                          <p className="text-xs text-gray-400 text-center">
+                            Applied: {application.appliedAt.toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })
-            )}
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {/* Application Details Modal */}
+      {selectedApplication && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedApplication(null)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b p-5 flex justify-between items-center">
+              <h2 className="text-xl font-bold">Application Details</h2>
+              <button onClick={() => setSelectedApplication(null)} className="text-gray-400 hover:text-gray-600">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-5 space-y-5">
+              <div>
+                <h3 className="font-semibold text-lg">{selectedApplication.jobTitle}</h3>
+                <p className="text-gray-600">{selectedApplication.companyName}</p>
+              </div>
+              
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <p className="font-semibold mb-2">Application Status</p>
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const config = getStatusConfig(selectedApplication.status);
+                    const Icon = config.icon;
+                    return (
+                      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${config.bg} flex items-center gap-2`}>
+                        <Icon className="w-4 h-4" />
+                        {config.text}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <p className="text-sm text-gray-600 mt-2">{getStatusConfig(selectedApplication.status).description}</p>
+              </div>
+              
+              {selectedApplication.statusHistory && selectedApplication.statusHistory.length > 0 && (
+                <div>
+                  <p className="font-semibold mb-3">Status Timeline</p>
+                  <div className="space-y-3">
+                    {selectedApplication.statusHistory.map((history, idx) => (
+                      <div key={idx} className="flex items-start gap-3">
+                        <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                        <div className="flex-1">
+                          <p className="font-semibold capitalize">{history.status}</p>
+                          <p className="text-sm text-gray-500">{history.timestamp?.toLocaleString()}</p>
+                          {history.note && <p className="text-sm text-gray-600 mt-1">{history.note}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {selectedApplication.employerFeedback && (
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <p className="font-semibold text-blue-800 mb-2">Employer Feedback</p>
+                  <p className="text-blue-700">{selectedApplication.employerFeedback}</p>
+                </div>
+              )}
+              
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <p className="font-semibold mb-2">Your Application</p>
+                <p><strong>Applied on:</strong> {selectedApplication.appliedAt.toLocaleString()}</p>
+                {selectedApplication.viewedAt && <p><strong>Viewed on:</strong> {selectedApplication.viewedAt.toLocaleString()}</p>}
+                {selectedApplication.shortlistedAt && <p><strong>Shortlisted on:</strong> {selectedApplication.shortlistedAt.toLocaleString()}</p>}
+                {selectedApplication.hiredAt && <p><strong>Hired on:</strong> {selectedApplication.hiredAt.toLocaleString()}</p>}
+                {selectedApplication.rejectedAt && <p><strong>Rejected on:</strong> {selectedApplication.rejectedAt.toLocaleString()}</p>}
+              </div>
+              
+              <button
+                onClick={() => setSelectedApplication(null)}
+                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Apply Modal */}
       {showApplyModal && (
